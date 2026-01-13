@@ -1,0 +1,800 @@
+import React, {useState, useEffect, useCallback} from "react";
+import { useNavigate } from "react-router-dom";
+import StudentTest from "./StudentTest.js";
+import StudentCalendar from "./StudentCalendar.js";
+import NotificationSystem from "../shared/NotificationSystem.js";
+import ProfileComponent from "../shared/ProfileComponent.js";
+import "../../styles/globals.css";
+import "../../styles/pages/student.css";
+import {
+  getClassAssignmentsAPI,
+  getStudentClassesAPI,
+  joinClassAPI,
+  getStudentPendingAssignmentsAPI,
+  getClassAnnouncementsAPI,
+  getClassMembersAPI,
+  getStudentGradesAPI
+} from "../../services/classManagerService.js";
+
+const Student = () => {
+  const navigate = useNavigate();
+
+  // --- State Management ---
+  const [activeTab, setActiveTab] = useState("classes");
+  const [activeClassTab, setActiveClassTab] = useState("assignments");
+  const [selectedClassId, setSelectedClassId] = useState(null);
+  const [joinedClasses, setJoinedClasses] = useState([]);
+  const [classCode, setClassCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+  const [searchResult, setSearchResult] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [classMembers, setClassMembers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [grades, setGrades] = useState([]); // <--- 2. State lưu điểm số
+
+  const [studentInfo, setStudentInfo] = useState({
+    id: localStorage.getItem('studentId') || 'student_' + Date.now(),
+    name: localStorage.getItem('userName') || "Nguyễn Văn A",
+    studentId: "20251234",
+    birthDate: "2003-05-12",
+    gender: "Nam",
+    email: localStorage.getItem('userEmail') || "student@email.com",
+    avatar: "https://via.placeholder.com/100"
+  });
+  const loadStudentClasses = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await getStudentClassesAPI();
+
+      if (response && response.data) {
+        const mappedClasses = response.data.map(cls => ({
+          ...cls,
+          code: cls.classCode || cls.code,
+          teacherName: cls.teacherName || "Giáo viên",
+          students: new Array(cls.numberOfStudents || 0).fill(null),
+          numberOfPendingAssignments: new Array(cls.numberOfPendingAssignments || 0).fill(null),
+          numberOfStudents: cls.numberOfStudents || 0,
+        }));
+        setJoinedClasses(mappedClasses);
+      }
+    } catch (error) {
+      console.error("Failed to load student classes:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStudentClasses();
+    if (!localStorage.getItem('studentId')) {
+      localStorage.setItem('studentId', studentInfo.id);
+    }
+  }, [loadStudentClasses, studentInfo.id]);
+
+  useEffect(() => {
+    if (selectedClassId && activeTab === "classDetails") {
+      if (activeClassTab === "assignments") {
+        loadClassAssignments(selectedClassId);
+      } else if (activeClassTab === "announcements") {
+        loadClassAnnouncements(selectedClassId);
+      }else if (activeClassTab === "members") {
+        loadClassMembers(selectedClassId);
+      } else if (activeClassTab === "grades") {
+        loadStudentGrades(selectedClassId); // <--- 3. Gọi hàm load điểm
+      }
+    }
+  }, [selectedClassId, activeClassTab, activeTab]);
+
+  // --- Handlers ---
+
+  const loadClassMembers = async (classId) => {
+    try {
+      setIsLoading(true);
+      const data = await getClassMembersAPI(classId);
+      if (Array.isArray(data)) {
+        setClassMembers(data);
+      } else {
+        setClassMembers([]);
+      }
+    } catch (error) {
+      console.error("Failed to load class members:", error);
+      setClassMembers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadStudentGrades = async (classId) => {
+    try {
+      setIsLoading(true);
+      const data = await getStudentGradesAPI(classId);
+      if (Array.isArray(data)) {
+        setGrades(data);
+      } else {
+        setGrades([]);
+      }
+    } catch (error) {
+      console.error("Failed to load grades:", error);
+      setGrades([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleViewClass = async (classId) => {
+    setSelectedClassId(classId);
+    setActiveTab("classDetails");
+    // Reset assignments khi chuyển lớp
+    setAssignments([]);
+    await loadClassAssignments(classId);
+  };
+
+  const loadClassAssignments = async (classId) => {
+    try {
+      setIsLoading(true);
+
+      const data = await getStudentPendingAssignmentsAPI(classId);
+
+      if (Array.isArray(data)) {
+        const validAssignments = data.filter(item => item !== null);
+        setAssignments(validAssignments);
+      } else {
+        setAssignments([]);
+      }
+    } catch (error) {
+      console.error("Failed to load assignments:", error);
+      setAssignments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadClassAnnouncements = async (classId) => {
+    try {
+      setIsLoading(true);
+      const data = await getClassAnnouncementsAPI(classId);
+
+      if (Array.isArray(data)) {
+        const sortedData = data.sort((a, b) =>
+            new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        setAnnouncements(sortedData);
+      } else {
+        setAnnouncements([]);
+      }
+    } catch (error) {
+      console.error("Failed to load announcements:", error);
+      setAnnouncements([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const handleSearchClass = () => {
+    if (classCode.trim() === '') {
+      alert('Vui lòng nhập mã lớp học!');
+      return;
+    }
+
+    setSearchResult({
+      id: "preview_mode",
+      name: `Lớp có mã: ${classCode}`,
+      teacherName: "---",
+      subject: "Nhấn tham gia để xem chi tiết",
+      students: [],
+      code: classCode
+    });
+  };
+
+  const handleJoinClass = async () => {
+    if (!classCode) return;
+    setIsJoining(true);
+    try {
+      const response = await joinClassAPI(classCode.trim());
+
+      if (response && response.status === 200) {
+        alert(`Tham gia lớp học thành công!`);
+        await loadStudentClasses();
+        setClassCode('');
+        setSearchResult(null);
+      }
+    } catch (error) {
+      console.error('Error joining class:', error);
+      const msg = error.response?.data?.message || 'Mã lớp không hợp lệ hoặc bạn đã tham gia lớp này!';
+      alert(msg);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.clear();
+    navigate("/", { replace: true });
+  };
+
+  const renderPriorityBadge = (priority) => {
+    const p = priority ? priority.toLowerCase() : 'normal';
+    const styles = {
+      urgent: { backgroundColor: '#ffebee', color: '#c62828', border: '1px solid #ffcdd2' },
+      high: { backgroundColor: '#fff3e0', color: '#ef6c00', border: '1px solid #ffe0b2' },
+      normal: { backgroundColor: '#e3f2fd', color: '#1565c0', border: '1px solid #bbdefb' }
+    };
+    const labels = {
+      urgent: 'Khẩn cấp',
+      high: 'Quan trọng',
+      normal: 'Thông thường'
+    };
+    return (
+        <span style={{
+          padding: '4px 8px',
+          borderRadius: '12px',
+          fontSize: '0.8rem',
+          fontWeight: '500',
+          ...styles[p]
+        }}>
+        {labels[p] || priority}
+      </span>
+    );
+  };
+  const selectedClass = joinedClasses.find(c => c.id === selectedClassId);
+
+  const getAvatarColor = (name) => {
+    const colors = ['#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#34495e', '#16a085', '#27ae60', '#2980b9', '#8e44ad', '#2c3e50', '#f1c40f', '#e67e22', '#e74c3c', '#95a5a6', '#f39c12', '#d35400', '#c0392b', '#bdc3c7', '#7f8c8d'];
+    let hash = 0;
+    if (name) {
+      for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+      }
+    }
+    const index = Math.abs(hash % colors.length);
+    return colors[index];
+  };
+
+  const renderGradeStatus = (status) => {
+    const statusMap = {
+      'Đã chấm': { color: '#2ecc71', bg: '#e8f8f5', label: 'Đã chấm' },
+      'Đã nộp': { color: '#3498db', bg: '#eaf2f8', label: 'Đợi chấm' },
+      'Chưa nộp': { color: '#95a5a6', bg: '#f4f6f6', label: 'Chưa làm' },
+      'Quá hạn': { color: '#e74c3c', bg: '#fdedec', label: 'Quá hạn' }
+    };
+    const s = statusMap[status] || statusMap['Chưa nộp'];
+    return (
+        <span style={{
+          backgroundColor: s.bg,
+          color: s.color,
+          padding: '4px 10px',
+          borderRadius: '12px',
+          fontSize: '0.8rem',
+          fontWeight: 'bold',
+          border: `1px solid ${s.color}40`
+        }}>
+        {s.label}
+      </span>
+    );
+  };
+
+  return (
+    <div className="student-dashboard">
+      {/* Navigation - Same style as Teacher */}
+      <nav className="nav-modern">
+        <div className="nav-container">
+          <div className="nav-brand">
+            <div className="brand-icon">🎓</div>
+            <span className="brand-text">GradingAI - Student</span>
+          </div>
+          <div className="nav-actions">
+            <button
+              className={`nav-tab ${activeTab === "classes" ? "active" : ""}`}
+              onClick={() => setActiveTab("classes")}
+            >
+              📚 Lớp học
+            </button>
+            <button
+              className={`nav-tab ${activeTab === "pending" ? "active" : ""}`}
+              onClick={() => setActiveTab("pending")}
+            >
+              📝 Bài tập
+            </button>
+            <button
+              className={`nav-tab ${activeTab === "calendar" ? "active" : ""}`}
+              onClick={() => setActiveTab("calendar")}
+            >
+              📅 Lịch học
+            </button>
+            <button
+              className={`nav-tab ${activeTab === "profile" ? "active" : ""}`}
+              onClick={() => setActiveTab("profile")}
+            >
+              👤 Hồ sơ
+            </button>
+            <div className="notification-wrapper">
+              <NotificationSystem
+                userRole="student"
+                classes={joinedClasses}
+                currentUser={studentInfo}
+              />
+            </div>
+            <button className="btn-logout" onClick={handleLogout}>
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Tab: Quản lý lớp học */}
+      <div className={`content ${activeTab === "classes" ? "active" : ""}`}>
+        <h2>📚 Quản lý lớp học</h2>
+
+        {/* Join Class Section */}
+        <div className="join-class-section">
+          <h3>🔗 Tham gia lớp học mới</h3>
+          <div className="join-class-form">
+            <input
+              type="text"
+              placeholder="Nhập mã lớp học..."
+              value={classCode}
+              onChange={(e) => setClassCode(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearchClass()}
+            />
+            <button
+              className="btn-primary"
+              onClick={handleSearchClass}
+              disabled={!classCode.trim()}
+            >
+              🔍 Tìm kiếm
+            </button>
+          </div>
+
+          {searchResult && (
+            <div className="search-result">
+              <div className="result-card">
+                <div className="result-info">
+                  <h4>{searchResult.name}</h4>
+                  <p>👨‍🏫 Giáo viên: {searchResult.teacherName}</p>
+                  <p>📖 Môn học: {searchResult.subject}</p>
+                  <p>👥 Số học sinh: {searchResult.students?.length || 0}</p>
+                </div>
+                <div className="result-actions">
+                  <button
+                    className="btn-primary"
+                    onClick={handleJoinClass}
+                    disabled={isJoining}
+                  >
+                    {isJoining ? '⏳ Đang xử lý...' : '✅ Tham gia'}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setSearchResult(null); setClassCode(''); }}
+                  >
+                    ❌ Hủy
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Classes List */}
+        <div className="classes-section">
+          <h3>📋 Danh sách lớp học ({joinedClasses.length})</h3>
+          {joinedClasses.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📭</div>
+              <h4>Chưa có lớp học nào</h4>
+              <p>Nhập mã lớp học ở trên để tham gia lớp học mới</p>
+            </div>
+          ) : (
+            <div className="classes-grid">
+              {joinedClasses.map((classItem) => (
+                <div key={classItem.id} className="class-card">
+                  <div className="class-card-header">
+                    <h4>{classItem.name}</h4>
+                    <span className="class-code">Mã: {classItem.code}</span>
+                  </div>
+                  <div className="class-card-body">
+                    <p>👨‍🏫 {classItem.teacherName}</p>
+                    <p>📖 {classItem.subject}</p>
+                    <p>📝 {classItem.numberOfPendingAssignments?.length || 0} bài tập</p>
+                  </div>
+                  <div className="class-card-footer">
+                    <button
+                      className="btn-primary"
+                      onClick={() => handleViewClass(classItem.id)}
+                    >
+                      👁️ Xem chi tiết
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tab: Bài tập */}
+      <div className={`content ${activeTab === "pending" ? "active" : ""}`}>
+        <StudentTest />
+      </div>
+
+      {/* Tab: Lịch học */}
+      <div className={`content ${activeTab === "calendar" ? "active" : ""}`}>
+        {/* Truyền state joinedClasses vào đây */}
+        <StudentCalendar joinedClasses={joinedClasses} />
+      </div>
+
+      {/* Tab: Hồ sơ */}
+      <div className={`content ${activeTab === "profile" ? "active" : ""}`}>
+        <ProfileComponent
+          userData={studentInfo}
+          onUpdate={(updatedInfo) => {
+            setStudentInfo(updatedInfo);
+            localStorage.setItem('userName', updatedInfo.name);
+            localStorage.setItem('userEmail', updatedInfo.email);
+          }}
+          onLogout={handleLogout}
+          userType="student"
+        />
+      </div>
+
+      {/* Tab: Chi tiết lớp học */}
+      <div className={`content ${activeTab === "classDetails" ? "active" : ""}`}>
+        <div className="class-details-header">
+          <button className="btn-secondary" onClick={() => setActiveTab("classes")}>
+            ← Quay lại
+          </button>
+          <div className="class-title-info">
+            <h2>{selectedClass?.name || 'Chi tiết lớp học'}</h2>
+            <span className="class-meta">Mã lớp: {selectedClass?.code} • {selectedClass?.subject}</span>
+          </div>
+        </div>
+
+        <div className="class-tabs">
+          <button
+            className={activeClassTab === "info" ? "active" : ""}
+            onClick={() => setActiveClassTab("info")}
+          >
+            ℹ️ Thông tin
+          </button>
+          <button
+            className={activeClassTab === "assignments" ? "active" : ""}
+            onClick={() => setActiveClassTab("assignments")}
+          >
+            📝 Bài tập ({assignments.length})
+          </button>
+          {/*<button */}
+          {/*  className={activeClassTab === "materials" ? "active" : ""}*/}
+          {/*  onClick={() => setActiveClassTab("materials")}*/}
+          {/*>*/}
+          {/*  📚 Tài liệu*/}
+          {/*</button>*/}
+          <button
+            className={activeClassTab === "announcements" ? "active" : ""}
+            onClick={() => setActiveClassTab("announcements")}
+          >
+            📢 Thông báo
+          </button>
+          <button
+            className={activeClassTab === "grades" ? "active" : ""}
+            onClick={() => setActiveClassTab("grades")}
+          >
+            📊 Điểm số
+          </button>
+          <button
+            className={activeClassTab === "members" ? "active" : ""}
+            onClick={() => setActiveClassTab("members")}
+          >
+            👥 Thành viên ({selectedClass?.students?.length || 0})
+          </button>
+        </div>
+
+        {/* Tab: Thông tin lớp */}
+        {activeClassTab === "info" && (
+          <div className="class-info-section">
+            <div className="info-card">
+              <h3>📋 Thông tin lớp học</h3>
+              <div className="info-grid">
+                <div className="info-item">
+                  <span className="info-label">Tên lớp</span>
+                  <span className="info-value">{selectedClass?.name}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Mã lớp</span>
+                  <span className="info-value">{selectedClass?.code}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Môn học</span>
+                  <span className="info-value">{selectedClass?.subject}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Giáo viên</span>
+                  <span className="info-value">{selectedClass?.teacherName}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Số học sinh</span>
+                  <span className="info-value">{selectedClass?.students?.length || 0}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Số bài tập</span>
+                  <span className="info-value">{selectedClass?.numberOfPendingAssignments?.length || 0}</span>
+                </div>
+              </div>
+              {selectedClass?.description && (
+                <div className="info-description">
+                  <span className="info-label">Mô tả</span>
+                  <p>{selectedClass.description}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Bài tập */}
+        {activeClassTab === "assignments" && (
+          <div className="assignments-section">
+            {assignments.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📋</div>
+                <h4>Chưa có bài tập nào</h4>
+                <p>Giáo viên chưa giao bài tập cho lớp này</p>
+              </div>
+            ) : (
+              <div className="assignments-list">
+                {assignments.map((assignment) => {
+                  if (!assignment) return null;
+                  return (
+                      <div key={assignment.id} className="assignment-item">
+                        <div className="assignment-info">
+                          <h4>{assignment.title}</h4>
+                          <p>{assignment.description || 'Không có mô tả'}</p>
+                          <div className="assignment-meta">
+                            <span
+                                className="due-date">📅 Hạn nộp: {assignment.deadline || assignment.dueDate || 'Không có hạn'}</span>
+                            {assignment.timeLimit && <span className="time-limit">⏱️ {assignment.timeLimit} phút</span>}
+                            {assignment.maxScore && <span className="max-score">🎯 {assignment.maxScore} điểm</span>}
+                          </div>
+                        </div>
+                        <div className="assignment-actions">
+                          <button
+                              className="btn-primary"
+                              onClick={() => navigate(`/assignment/${assignment.id}`)}
+                          >
+                            ✏️ Làm bài
+                          </button>
+                        </div>
+                      </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/*/!* Tab: Tài liệu *!/*/}
+        {/*{activeClassTab === "materials" && (*/}
+        {/*  <div className="materials-section">*/}
+        {/*    <div className="empty-state">*/}
+        {/*      <div className="empty-icon">📚</div>*/}
+        {/*      <h4>Chưa có tài liệu nào</h4>*/}
+        {/*      <p>Giáo viên chưa tải lên tài liệu cho lớp này</p>*/}
+        {/*    </div>*/}
+        {/*  </div>*/}
+        {/*)}*/}
+
+        {/* Tab: Thông báo */}
+        {activeClassTab === "announcements" && (
+            <div className="announcements-section">
+              {isLoading ? (
+                  <div className="loading-state">⏳ Đang tải thông báo...</div>
+              ) : announcements.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">📢</div>
+                    <h4>Chưa có thông báo nào</h4>
+                    <p>Giáo viên chưa đăng thông báo cho lớp này</p>
+                  </div>
+              ) : (
+                  <div className="announcements-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    {announcements.map((announcement) => (
+                        <div key={announcement.id} className="announcement-card" style={{
+                          backgroundColor: 'white',
+                          padding: '20px',
+                          borderRadius: '8px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          borderLeft: '4px solid #1976d2'
+                        }}>
+                          <div className="announcement-header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {renderPriorityBadge(announcement.priority)}
+                              <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{announcement.title}</span>
+                            </div>
+                            <span className="announcement-date" style={{ color: '#666', fontSize: '0.9rem' }}>
+                        📅 {new Date(announcement.createdAt).toLocaleString('vi-VN')}
+                      </span>
+                          </div>
+
+                          <div className="announcement-content" style={{ whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                            {announcement.content}
+                          </div>
+
+                          {announcement.attachmentUrl && (
+                              <div className="announcement-attachment" style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+                                <a href={announcement.attachmentUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#1976d2', textDecoration: 'none' }}>
+                                  📎 Tải xuống tài liệu đính kèm
+                                </a>
+                              </div>
+                          )}
+
+                          <div className="announcement-footer" style={{ marginTop: '10px', fontSize: '0.85rem', color: '#888' }}>
+                            ✍️ Đăng bởi: Giáo viên
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+              )}
+            </div>
+        )}
+
+        {/* Tab: Điểm số */}
+        {activeClassTab === "grades" && (
+            <div className="grades-section">
+              <div className="grades-card">
+                <h3>📊 Bảng điểm cá nhân</h3>
+
+                {isLoading ? (
+                    <div className="loading-state">⏳ Đang tải bảng điểm...</div>
+                ) : grades.length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-icon">📝</div>
+                      <h4>Chưa có dữ liệu điểm</h4>
+                      <p>Bạn chưa làm bài tập nào hoặc giáo viên chưa chấm điểm.</p>
+                    </div>
+                ) : (
+                    <div className="grades-container">
+                      {/* Summary Box - Thống kê nhanh */}
+                      <div className="grades-summary" style={{
+                        display: 'flex', gap: '20px', marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px'
+                      }}>
+                        <div className="summary-item">
+                          <span style={{color: '#7f8c8d', fontSize: '0.9rem'}}>Trung bình môn</span>
+                          <strong style={{fontSize: '1.5rem', color: '#2c3e50'}}>
+                            {(() => {
+                              const graded = grades.filter(g => g.score !== null);
+                              if (graded.length === 0) return "--";
+                              const total = graded.reduce((sum, g) => sum + (g.score / g.maxScore * 10), 0);
+                              return (total / graded.length).toFixed(1);
+                            })()}
+                          </strong>
+                        </div>
+                        <div className="summary-item">
+                          <span style={{color: '#7f8c8d', fontSize: '0.9rem'}}>Số bài đã nộp</span>
+                          <strong style={{fontSize: '1.5rem', color: '#3498db'}}>
+                            {grades.filter(g => g.submissionId).length} / {grades.length}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Grades Table */}
+                      <div className="grades-table-wrapper" style={{overflowX: 'auto'}}>
+                        <table className="grades-table" style={{width: '100%', borderCollapse: 'collapse'}}>
+                          <thead>
+                          <tr style={{backgroundColor: '#f1f2f6', color: '#57606f', textAlign: 'left'}}>
+                            <th style={{padding: '12px', borderBottom: '2px solid #dfe4ea'}}>Bài tập</th>
+                            <th style={{padding: '12px', borderBottom: '2px solid #dfe4ea'}}>Ngày nộp</th>
+                            <th style={{padding: '12px', borderBottom: '2px solid #dfe4ea'}}>Trạng thái</th>
+                            <th style={{padding: '12px', borderBottom: '2px solid #dfe4ea'}}>Điểm số</th>
+                            <th style={{padding: '12px', borderBottom: '2px solid #dfe4ea', width: '30%'}}>Nhận xét</th>
+                          </tr>
+                          </thead>
+                          <tbody>
+                          {grades.map((grade) => (
+                              <tr key={grade.assignmentId} style={{borderBottom: '1px solid #f1f2f6'}}>
+                                <td style={{padding: '12px', fontWeight: '500'}}>
+                                  {grade.assignmentTitle}
+                                </td>
+                                <td style={{padding: '12px', color: '#7f8c8d', fontSize: '0.9rem'}}>
+                                  {grade.submittedAt ? new Date(grade.submittedAt).toLocaleDateString('vi-VN') : '--'}
+                                </td>
+                                <td style={{padding: '12px'}}>
+                                  {renderGradeStatus(grade.status)}
+                                </td>
+                                <td style={{padding: '12px', fontWeight: 'bold', fontSize: '1.1rem'}}>
+                                  {grade.score !== null ? (
+                                      <span style={{color: grade.score >= 5 ? '#27ae60' : '#e74c3c'}}>
+                                        {grade.score}/{grade.maxScore}
+                                    </span>
+                                  ) : '--'}
+                                </td>
+                                <td style={{padding: '12px', color: '#57606f', fontStyle: 'italic', fontSize: '0.9rem'}}>
+                                  {grade.feedback || (grade.score !== null ? "Không có nhận xét" : "")}
+                                </td>
+                              </tr>
+                          ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                )}
+              </div>
+            </div>
+        )}
+
+        {/* Tab: Thành viên - ĐÃ CẬP NHẬT */}
+        {activeClassTab === "members" && (
+            <div className="members-section">
+              <div className="members-card">
+                <h3>👥 Danh sách thành viên</h3>
+
+                {/* Giáo viên - Lấy từ selectedClass (vì API members có thể chỉ trả về students) */}
+                <div className="member-group">
+                  <h4>👨‍🏫 Giáo viên</h4>
+                  <div className="member-item teacher">
+                    <div
+                        className="member-avatar"
+                        style={{ backgroundColor: '#2c3e50', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '40px', height: '40px' }}
+                    >
+                      👨‍🏫
+                    </div>
+                    <div className="member-info">
+                      <span className="member-name">{selectedClass?.teacherName || 'Giáo viên'}</span>
+                      <span className="member-role">Giáo viên phụ trách</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Học sinh - Lấy từ state classMembers */}
+                <div className="member-group">
+                  <h4>👨‍🎓 Học sinh ({classMembers.length})</h4>
+                  {isLoading ? (
+                      <div className="loading-state">⏳ Đang tải danh sách thành viên...</div>
+                  ) : classMembers.length === 0 ? (
+                      <p className="no-members">Chưa có học sinh nào khác trong lớp</p>
+                  ) : (
+                      <div className="members-list">
+                        {classMembers.map((member) => (
+                            <div key={member.id} className="member-item">
+                              <div
+                                  className="member-avatar"
+                                  style={{
+                                    backgroundColor: getAvatarColor(member.name),
+                                    color: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '50%',
+                                    width: '40px',
+                                    height: '40px',
+                                    fontWeight: 'bold'
+                                  }}
+                              >
+                                {member.name ? member.name.charAt(0).toUpperCase() : '?'}
+                              </div>
+                              <div className="member-info">
+                                <span className="member-name">{member.name || 'Người dùng ẩn danh'}</span>
+                                <span className="member-email">{member.email || 'Chưa có email'}</span>
+                              </div>
+                              {/* Kiểm tra nếu đây là user đang đăng nhập */}
+                              {member.email === studentInfo.email && (
+                                  <span className="member-badge" style={{
+                                    backgroundColor: '#e3f2fd',
+                                    color: '#1976d2',
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    fontSize: '0.75rem',
+                                    border: '1px solid #bbdefb'
+                                  }}>
+                            Bạn
+                          </span>
+                              )}
+                            </div>
+                        ))}
+                      </div>
+                  )}
+                </div>
+              </div>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Student;

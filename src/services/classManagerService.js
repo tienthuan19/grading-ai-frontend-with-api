@@ -1,0 +1,235 @@
+// src/services/classManagerService.js
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:8081/api/lms-backend/v1';
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  };
+};
+
+// --- Teacher APIs ---
+export const getTeacherClassesAPI = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/teacher/my-classes`, getAuthHeaders());
+    return response.data.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getDashboardStatsAPI = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/teacher/dashboard-stats`, getAuthHeaders());
+    return response.data.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createClassAPI = async (classData) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/classrooms`, classData, getAuthHeaders());
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// --- Student APIs ---
+
+/**
+ * Get joined classes for student
+ * GET /classrooms/student/my-classes
+ */
+export const getStudentClassesAPI = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/student/my-classes`, getAuthHeaders());
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Join a class
+ * POST /classrooms/join
+ * Body: { code: "..." }
+ */
+export const joinClassAPI = async (classCode) => {
+  try {
+    const response = await axios.post(
+        `${API_BASE_URL}/classrooms/join`,
+        { classCode: classCode },
+        getAuthHeaders()
+    );
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// --- CÁC HÀM MỚI ĐƯỢC THÊM VÀO ---
+
+/**
+ * Lấy danh sách thông báo của lớp học
+ * GET /classrooms/{classroomId}/announcements
+ * Dùng cho cả Giáo viên và Học sinh
+ */
+export const getClassAnnouncementsAPI = async (classroomId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/${classroomId}/announcements`, getAuthHeaders());
+    // Lưu ý: Kiểm tra xem backend trả về mảng trực tiếp hay bọc trong object (ví dụ: response.data.result)
+    return response.data.data || [];
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Tạo thông báo mới cho lớp học
+ * POST /classrooms/{classroomId}/announcements
+ * Chỉ dùng cho Giáo viên
+ */
+export const createClassAnnouncementAPI = async (classroomId, announcementData) => {
+  // announcementData: { title, content, priority }
+  try {
+    const response = await axios.post(
+        `${API_BASE_URL}/classrooms/${classroomId}/announcements`,
+        announcementData,
+        getAuthHeaders()
+    );
+    return response.data.result || response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Lấy danh sách thông báo của người dùng (Notification System)
+ * GET /notifications
+ * Dùng cho Học sinh (và Giáo viên nếu hệ thống hỗ trợ)
+ */
+export const getMyNotificationsAPI = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/notifications`, getAuthHeaders());
+    return response.data.result || response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// src/services/classManagerService.js
+
+// ... (Giữ nguyên các hàm cũ)
+
+// --- ASSIGNMENT APIs ---
+
+/**
+ * Lấy danh sách bài tập của lớp
+ * GET /api/lms-backend/v1/classrooms/{classroomId}/assignments
+ */
+export const getClassAssignmentsAPI = async (classroomId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/${classroomId}/assignments`, getAuthHeaders());
+    // Backend trả về ApiResponse<List<AssignmentResponse>>, dữ liệu nằm trong field 'data'
+    return response.data.data || [];
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getStudentPendingAssignmentsAPI = async (classroomId) => {
+  try {
+    const token = localStorage.getItem('token');
+    // Gọi vào endpoint /pending mới tạo
+    const response = await axios.get(
+        `${API_BASE_URL}/classrooms/${classroomId}/assignments/pending`, getAuthHeaders());
+    return response.data.data || response.data.result;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Tạo bài tập mới
+ * POST /api/lms-backend/v1/classrooms/{classroomId}/assignments
+ */
+export const createClassAssignmentAPI = async (classroomId, assignmentData) => {
+  try {
+    const response = await axios.post(
+        `${API_BASE_URL}/classrooms/${classroomId}/assignments`,
+        assignmentData,
+        getAuthHeaders()
+    );
+    // Backend trả về ApiResponse<AssignmentResponse>
+    return response.data.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAssignmentDetailAPI = async (assignmentId) => {
+  try {
+    const response = await axios.get(
+        `${API_BASE_URL}/classrooms/assignments/${assignmentId}`,
+        getAuthHeaders()
+        ///api/lms-backend/v1/classrooms/assignments/{assignmentId}
+    );
+    // Backend: ApiResponse<AssignmentDetailResponse>
+    return response.data.data || response.data.result;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// 2. Nộp bài tập
+export const submitAssignmentAPI = async (assignmentId, submissionData) => {
+  try {
+    const token = localStorage.getItem('token');
+
+    // submissionData format: { answers: [{ questionId: "...", studentAnswer: "..." }] }
+
+    const response = await axios.post(
+        // Lưu ý: Backend controller mapping thường là /assignments, kiểm tra lại AssignmentController của bạn
+        // Nếu class level là @RequestMapping("/assignments"), thì url dưới là đúng.
+        `${API_BASE_URL}/classrooms/${assignmentId}/submit`,
+        submissionData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json' // Gửi JSON thay vì multipart/form-data
+          }
+        }
+    );
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getClassMembersAPI = async (classroomId) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/classrooms/${classroomId}/members`, getAuthHeaders());
+    return response.data.data || [];
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getStudentGradesAPI = async (classroomId) => {
+  try {
+    const response = await axios.get(
+        `${API_BASE_URL}/student/grades/${classroomId}`,
+        getAuthHeaders() // Hàm này cần tự động thêm X-User-Id hoặc Bearer Token chứa ID
+    );
+    return response.data.data || [];
+  } catch (error) {
+    throw error;
+  }
+};
