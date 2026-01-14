@@ -340,23 +340,25 @@
 
 /* Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #06b6d4, #0891b2);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 10px;
-  font-weight: 600;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-semibold);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+  gap: var(--space-2);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.25);
+  font-size: var(--text-sm);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
+  box-shadow: 0 6px 16px rgba(6, 182, 212, 0.35);
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
 }
 
 .btn-primary:disabled {
@@ -366,22 +368,24 @@
 
 .btn-secondary {
   background: white;
-  color: #475569;
-  border: 2px solid #e5e7eb;
-  padding: 12px 24px;
-  border-radius: 10px;
-  font-weight: 600;
+  color: var(--gray-700);
+  border: 2px solid var(--gray-200);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-semibold);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
 }
 
 .btn-secondary:hover {
-  background: #f8fafc;
-  border-color: #06b6d4;
-  color: #0891b2;
+  background: var(--gray-50);
+  border-color: var(--primary-400);
+  color: var(--primary-600);
+  transform: translateY(-1px);
 }
 
 /* Class Details */
@@ -1730,6 +1734,53 @@
   }
   
   .btn-do-assignment {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* StudentTest Responsive */
+  .student-test {
+    padding: var(--space-4);
+  }
+
+  .student-test h2 {
+    font-size: var(--text-2xl);
+  }
+
+  .class-selection-section {
+    padding: var(--space-5);
+  }
+
+  .class-grid-simple {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .test-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .test-header h2 {
+    font-size: var(--text-xl);
+  }
+
+  .test-list-section {
+    padding: var(--space-5);
+  }
+
+  .test-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .test-card {
+    padding: var(--space-5);
+  }
+
+  .btn-primary,
+  .btn-secondary {
     width: 100%;
     justify-content: center;
   }
